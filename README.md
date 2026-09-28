@@ -29,4 +29,9 @@ emcmake cmake .. \
 
 emmake make mgba_libretro -j$(nproc)
 ```
+Frontend.c && Build.sh place in. ```'~/emsdk/mgba/build-libretro'```
 
+Then run build: 
+```
+chmod +x build.sh && ./build.sh
+```
