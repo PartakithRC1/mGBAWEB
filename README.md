@@ -13,7 +13,9 @@ git clone https://github.com/libretro/mgba.git   # libretro-maintained mirror, h
 cd mgba
 emmake make -f Makefile.libretro platform=emscripten
 ```
-# you're already in ~/emsdk/mgba with emsdk sourced
+```
+# you're already in ~/emsdk/mgba with emsdk sourced and it likely error'd run the below.
+```
 ```
 mkdir build-libretro && cd build-libretro
 
