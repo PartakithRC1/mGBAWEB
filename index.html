@@ -269,6 +269,24 @@
     <div class="wordmark">mGBA <span>Web</span></div>
   </div>
   <div class="header-actions">
+    <wa-select id="shaderSelect" size="s" value="none" aria-label="Shader">
+      <wa-icon slot="start" name="wand-magic-sparkles" variant="solid"></wa-icon>
+      <wa-option value="none">No filter</wa-option>
+      <wa-option value="smooth">Smooth</wa-option>
+      <wa-option value="scanlines">Scanlines</wa-option>
+      <wa-option value="grid">LCD grid</wa-option>
+    </wa-select>
+
+    <wa-button id="exportSaveBtn" appearance="plain" size="s" disabled>
+      <wa-icon slot="start" name="file-export" variant="solid"></wa-icon>
+      Export save
+    </wa-button>
+    <wa-button id="importSaveBtn" appearance="plain" size="s" disabled>
+      <wa-icon slot="start" name="file-import" variant="solid"></wa-icon>
+      Import save
+    </wa-button>
+    <input type="file" id="importSaveInput" accept=".srm,.sav" hidden>
+
     <wa-button id="helpBtn" appearance="plain" size="s">
       <wa-icon slot="start" name="keyboard" variant="solid"></wa-icon>
       Controls
@@ -361,6 +379,7 @@
     statusText: $('statusText'), romName: $('romName'),
     videoInfo: $('videoInfo'), audioInfo: $('audioInfo'), saveStatus: $('saveStatus'),
     emptyHint: $('emptyHint'), loadBtn: $('loadBtn'), romInput: $('romInput'),
+    exportSaveBtn: $('exportSaveBtn'), importSaveBtn: $('importSaveBtn'), importSaveInput: $('importSaveInput'),
   };
 
   function setLeds(state) {
@@ -650,6 +669,8 @@
     ui.romName.textContent = file.name;
     ui.audioInfo.textContent = `${getAudioRate()} Hz stereo`;
     ui.saveStatus.textContent = restored ? 'restored from browser storage' : (sramSize > 0 ? 'new save' : 'no battery save');
+    ui.exportSaveBtn.disabled = sramSize <= 0;
+    ui.importSaveBtn.disabled = sramSize <= 0;
     ui.emptyHint.hidden = true;
     ui.loadBtn.innerHTML = '<wa-icon slot="start" name="folder-open" variant="solid"></wa-icon>Change ROM';
     setStatus('Running');
@@ -665,6 +686,54 @@
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     audioCtx.resume();
     requestAnimationFrame(loop);
+  });
+
+  // --- Export / import save (.srm) ---
+  ui.exportSaveBtn.addEventListener('click', () => {
+    if (!currentSaveName) return;
+    flushSram(); // make sure the file reflects the live in-game save before exporting
+    let bytes;
+    try {
+      bytes = Module.FS.readFile(currentSaveName);
+    } catch (err) {
+      console.error('Export failed: no save file yet', err);
+      return;
+    }
+    const blob = new Blob([bytes], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = currentSaveName.split('/').pop();
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  ui.importSaveBtn.addEventListener('click', () => ui.importSaveInput.click());
+
+  ui.importSaveInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = ''; // allow re-importing the same filename later
+    if (!file || !currentSaveName) return;
+
+    const sramSize = getSramSize();
+    if (sramSize <= 0) {
+      ui.saveStatus.textContent = 'this game has no battery save to import into';
+      return;
+    }
+
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const clipped = bytes.subarray(0, Math.min(bytes.length, sramSize));
+    Module.HEAPU8.set(clipped, getSramPtr()); // apply to the running game immediately
+    Module.FS.writeFile(currentSaveName, clipped); // persist it under this ROM's save name
+
+    setLeds('save');
+    Module.FS.syncfs(false, (err) => {
+      if (err) { console.error('IDBFS sync failed', err); ui.saveStatus.textContent = 'import sync failed'; }
+      else { lastSyncTime = Date.now(); ui.saveStatus.textContent = 'imported save'; }
+      if (running) setLeds('run');
+    });
   });
 })();
 </script>
