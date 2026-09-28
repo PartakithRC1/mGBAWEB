@@ -1,7 +1,8 @@
 # mGBAWEB
 GBA EMU | WASM | WEB | LIBRETRO
-
 ===
+Build 3 Live: https://partakithrc1.github.io/mGBAWEB/
+
 ```
 sudo apt install cmake git python3 build-essential
 git clone https://github.com/emscripten-core/emsdk.git
@@ -29,4 +30,12 @@ emcmake cmake .. \
 
 emmake make mgba_libretro -j$(nproc)
 ```
+Frontend.c && Build.sh place in. ```'~/emsdk/mgba/build-libretro'```
 
+Then run build: 
+```
+chmod +x build.sh && ./build.sh
+```
+
+While the repository frontend is MIT-licensed, the underlying mGBA emulator engine/Wasm module is subject to the Mozilla Public License v2.0
+[https://github.com/libretro/mgba](https://github.com/libretro/mgba)
