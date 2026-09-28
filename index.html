@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="en" class="wa-dark wa-brand-indigo">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mGBA Web</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- Web Awesome: theme + utilities + native styles, and the component autoloader -->
+<link rel="stylesheet" href="https://ka-f.webawesome.com/webawesome@3.14.0/styles/webawesome.css">
+<script type="module" src="https://ka-f.webawesome.com/webawesome@3.14.0/webawesome.loader.js"></script>
+
+<style>
+  :where(:root), .wa-light, .wa-dark, .wa-invert {
+    --wa-font-family-body: 'Manrope', system-ui, sans-serif;
+    --wa-font-family-heading: 'Manrope', system-ui, sans-serif;
+  }
+
+  :root {
+    --chassis: #15161b;
+    --panel: #1c1e26;
+    --line: #2e313f;
+    --text: #eceef4;
+    --text-muted: #8d93a8;
+    --led-idle: #4b4f5e;
+    --led-run: #52d17c;
+    --led-save: #e8a33d;
+    --screen-bg: #0b0c10;
+    --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  [hidden] { display: none !important; }
+
+  * { box-sizing: border-box; }
+
+  html, body { margin: 0; min-height: 100%; }
+
+  body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background:
+      radial-gradient(1200px 600px at 50% -10%, #23253300, transparent),
+      radial-gradient(900px 500px at 50% 0%, #262a3d 0%, transparent 70%),
+      var(--chassis);
+    color: var(--text);
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-weight: 500;
+  }
+
+  /* ---------- Header ---------- */
+  .app-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.85rem clamp(1rem, 4vw, 2rem);
+    border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--chassis) 88%, transparent);
+    backdrop-filter: blur(10px);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+  }
+  .brand { display: flex; align-items: center; gap: 0.7rem; }
+  .wordmark { font-size: 1.1rem; font-weight: 800; letter-spacing: -0.02em; }
+  .wordmark span { color: var(--text-muted); font-weight: 600; }
+  .header-actions { display: flex; gap: 0.25rem; }
+
+  /* ---------- LEDs ---------- */
+  .led {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex: none;
+    background: var(--led-idle);
+    color: var(--led-idle);
+    box-shadow: 0 0 0 2px rgb(0 0 0 / 0.35);
+    transition: background 0.25s, color 0.25s, box-shadow 0.25s;
+  }
+  .led[data-state="run"]  { background: var(--led-run);  color: var(--led-run);  box-shadow: 0 0 0 2px rgb(0 0 0 / 0.35), 0 0 10px currentColor; }
+  .led[data-state="save"] { background: var(--led-save); color: var(--led-save); box-shadow: 0 0 0 2px rgb(0 0 0 / 0.35), 0 0 10px currentColor; }
+
+  /* ---------- Console (the hardware) ---------- */
+  .stage {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: clamp(1.25rem, 4vw, 3rem) clamp(0.75rem, 3vw, 2rem) 1rem;
+  }
+
+  .console {
+    position: relative;
+    width: fit-content;
+    max-width: 100%;
+    padding: clamp(14px, 2.5vw, 26px);
+    border-radius: 26px;
+    background:
+      linear-gradient(165deg, rgb(255 255 255 / 0.05), transparent 38%),
+      linear-gradient(160deg, #2b2e3c 0%, #1e2029 55%, #191b23 100%);
+    border: 1px solid #383b4c;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.08),
+      inset 0 -2px 6px rgb(0 0 0 / 0.35),
+      0 30px 60px -20px rgb(0 0 0 / 0.7),
+      0 0 0 1px rgb(0 0 0 / 0.5);
+  }
+
+  .screw {
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #5b5f74, #23252f 70%);
+    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.5), 0 1px 0 rgb(255 255 255 / 0.06);
+  }
+  .screw::after {
+    content: '';
+    position: absolute;
+    inset: 4px -1px auto -1px;
+    height: 1px;
+    background: rgb(0 0 0 / 0.55);
+    transform: rotate(35deg);
+  }
+  .screw.tl { top: 10px; left: 10px; }
+  .screw.tr { top: 10px; right: 10px; }
+  .screw.bl { bottom: 10px; left: 10px; }
+  .screw.br { bottom: 10px; right: 10px; }
+
+  .screen-bezel {
+    position: relative;
+    margin: 6px 6px 0;
+    padding: clamp(8px, 1.6vw, 14px);
+    border-radius: 12px;
+    background: var(--screen-bg);
+    box-shadow:
+      inset 0 0 0 1px rgb(255 255 255 / 0.04),
+      inset 0 8px 22px rgb(0 0 0 / 0.75),
+      0 1px 0 rgb(255 255 255 / 0.06);
+  }
+
+  .screen-bezel canvas {
+    display: block;
+    margin: 0 auto;
+    max-width: 100%;
+    height: auto;
+    background: #000;
+    border-radius: 3px;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+
+  /* The one deliberate motion: a CRT-style power-on when a ROM boots */
+  .screen-bezel.power-on canvas { animation: power-on 520ms cubic-bezier(0.2, 0.7, 0.2, 1); }
+  @keyframes power-on {
+    0%   { filter: brightness(3) saturate(0); transform: scaleY(0.02); opacity: 0.6; }
+    45%  { filter: brightness(2) saturate(0.4); transform: scaleY(1); opacity: 1; }
+    100% { filter: none; transform: none; opacity: 1; }
+  }
+
+  .empty-hint {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    text-align: center;
+    color: var(--text-muted);
+    pointer-events: none;
+    font-size: 0.9rem;
+  }
+  .empty-hint strong { color: var(--text); font-size: 1rem; font-weight: 700; }
+
+  /* ---------- Control rail ---------- */
+  .rail {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem 1rem;
+    margin: 1.1rem 6px 0.15rem;
+  }
+  .rail wa-select { width: 8.5rem; }
+
+  .custom-size {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin: 0.85rem 6px 0;
+    padding-top: 0.85rem;
+    border-top: 1px solid var(--line);
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+  .custom-size label { display: inline-flex; align-items: center; gap: 0.4rem; }
+  .custom-size input {
+    width: 5.2rem;
+    padding: 0.4rem 0.55rem;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: #14151b;
+    color: var(--text);
+    font: 500 0.85rem var(--mono);
+  }
+  .custom-size input:focus-visible { outline: 2px solid var(--wa-color-brand-fill-loud, #7c6fea); outline-offset: 1px; }
+
+  /* ---------- Status strip (telemetry) ---------- */
+  .status-strip {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.4rem 1.75rem;
+    padding: 0.7rem clamp(1rem, 4vw, 2rem);
+    border-top: 1px solid var(--line);
+    background: #121319;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+  .status-item { display: inline-flex; align-items: center; gap: 0.5rem; white-space: nowrap; }
+  .status-item b { color: var(--text); font-weight: 500; }
+
+  /* ---------- Help ---------- */
+  .help {
+    width: min(560px, 100% - 2rem);
+    margin: 1.25rem auto 2.5rem;
+  }
+  .keys {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+  .keys td { padding: 0.45rem 0; border-bottom: 1px solid var(--line); }
+  .keys tr:last-child td { border-bottom: 0; }
+  .keys td:last-child { text-align: right; }
+  kbd {
+    font: 500 0.78rem var(--mono);
+    padding: 0.18rem 0.5rem;
+    border-radius: 6px;
+    border: 1px solid #3a3e52;
+    border-bottom-width: 2px;
+    background: #23252f;
+    color: var(--text);
+  }
+
+  @media (max-width: 520px) {
+    .header-actions wa-button::part(label) { display: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .screen-bezel.power-on canvas { animation: none; }
+    .led { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <div class="brand">
+    <span class="led" id="powerLed" data-state="idle" aria-hidden="true"></span>
+    <div class="wordmark">mGBA <span>Web</span></div>
+  </div>
+  <div class="header-actions">
+    <wa-button id="helpBtn" appearance="plain" size="s">
+      <wa-icon slot="start" name="keyboard" variant="solid"></wa-icon>
+      Controls
+    </wa-button>
+    <wa-button id="fullscreenBtn" appearance="plain" size="s">
+      <wa-icon id="fullscreenIcon" slot="start" name="expand" variant="solid"></wa-icon>
+      Fullscreen
+    </wa-button>
+  </div>
+</header>
+
+<main class="stage">
+  <div class="console">
+    <span class="screw tl"></span><span class="screw tr"></span>
+    <span class="screw bl"></span><span class="screw br"></span>
+
+    <div class="screen-bezel" id="bezel">
+      <canvas id="screen" width="240" height="160" style="width:480px;height:320px;"></canvas>
+      <div class="empty-hint" id="emptyHint">
+        <strong>No game loaded</strong>
+        <span>Load a .gba, .gb or .gbc file to start</span>
+      </div>
+    </div>
+
+    <div class="rail">
+      <wa-button id="loadBtn" variant="brand" appearance="accent" disabled>
+        <wa-icon slot="start" name="folder-open" variant="solid"></wa-icon>
+        Load ROM
+      </wa-button>
+
+      <wa-select id="scaleSelect" value="2" aria-label="Display scale">
+        <wa-icon slot="start" name="up-right-and-down-left-from-center" variant="solid"></wa-icon>
+        <wa-option value="1">1×</wa-option>
+        <wa-option value="2" selected>2×</wa-option>
+        <wa-option value="3">3×</wa-option>
+        <wa-option value="4">4×</wa-option>
+        <wa-option value="5">5×</wa-option>
+      </wa-select>
+
+      <wa-switch id="stretchToggle">Stretch</wa-switch>
+      <wa-button id="fullscreenBtn2" appearance="plain" size="s">
+      <wa-icon id="fullscreenIcon" slot="start" name="expand" variant="solid"></wa-icon>
+      Fullscreen
+    </wa-button>
+    </div>
+
+    <div class="custom-size" id="customSizeRow" hidden>
+      <label>Width <input type="number" id="customW" min="60" max="4000" value="480"></label>
+      <label>Height <input type="number" id="customH" min="40" max="4000" value="320"></label>
+      <wa-button id="applyCustomSize" size="s" appearance="outlined">Apply size</wa-button>
+    </div>
+
+    <input type="file" id="romInput" accept=".gba,.gb,.gbc" hidden>
+  </div>
+</main>
+
+<div class="status-strip" role="status" aria-live="polite">
+  <span class="status-item"><span class="led" id="statusLed" data-state="idle"></span><b id="statusText">Loading core</b></span>
+  <span class="status-item">rom <b id="romName">none</b></span>
+  <span class="status-item">video <b id="videoInfo">none</b></span>
+  <span class="status-item">audio <b id="audioInfo">none</b></span>
+  <span class="status-item">save <b id="saveStatus">none</b></span>
+</div>
+
+<div class="help">
+  <wa-details id="helpDetails" summary="Keyboard controls" icon-placement="start">
+    <table class="keys">
+      <tr><td>D-pad</td><td><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd></td></tr>
+      <tr><td>A button</td><td><kbd>Z</kbd></td></tr>
+      <tr><td>B button</td><td><kbd>X</kbd></td></tr>
+      <tr><td>L shoulder</td><td><kbd>A</kbd></td></tr>
+      <tr><td>R shoulder</td><td><kbd>S</kbd></td></tr>
+      <tr><td>Start</td><td><kbd>Enter</kbd></td></tr>
+      <tr><td>Select</td><td><kbd>Right Shift</kbd></td></tr>
+    </table>
+  </wa-details>
+</div>
+
+<!-- Produced by build.sh; keep mgba_web.js / mgba_web.wasm next to this file -->
+<script src="mgba_web.js"></script>
+<script>
+(async () => {
+  const $ = (id) => document.getElementById(id);
+  const canvas = $('screen');
+  const ctx = canvas.getContext('2d');
+  const bezel = $('bezel');
+
+  const ui = {
+    powerLed: $('powerLed'), statusLed: $('statusLed'),
+    statusText: $('statusText'), romName: $('romName'),
+    videoInfo: $('videoInfo'), audioInfo: $('audioInfo'), saveStatus: $('saveStatus'),
+    emptyHint: $('emptyHint'), loadBtn: $('loadBtn'), romInput: $('romInput'),
+  };
+
+  function setLeds(state) {
+    ui.powerLed.dataset.state = state;
+    ui.statusLed.dataset.state = state;
+  }
+  function setStatus(text) { ui.statusText.textContent = text; }
+
+  const Module = await createMGBAModule({
+    print: (t) => console.log(t),
+    printErr: (t) => console.error(t),
+  });
+
+  // --- IDBFS: mount a persistent directory before anything touches save paths ---
+  Module.FS.mkdir('/data');
+  Module.FS.mount(Module.FS.filesystems.IDBFS, {}, '/data');
+  await new Promise((resolve, reject) => {
+    Module.FS.syncfs(true, (err) => (err ? reject(err) : resolve()));
+  });
+  try { Module.FS.mkdir('/data/saves'); } catch (e) { /* exists after first run */ }
+  try { Module.FS.mkdir('/data/system'); } catch (e) { /* exists after first run */ }
+
+  const init = Module.cwrap('mgba_web_init', 'number', []);
+  const loadRom = Module.cwrap('mgba_web_load_rom', 'number', ['number', 'number', 'string']);
+  const runFrame = Module.cwrap('mgba_web_run_frame', null, []);
+  const getVideoBuf = Module.cwrap('mgba_web_get_video_buffer', 'number', []);
+  const getVideoW = Module.cwrap('mgba_web_get_video_width', 'number', []);
+  const getVideoH = Module.cwrap('mgba_web_get_video_height', 'number', []);
+  const getVideoPitch = Module.cwrap('mgba_web_get_video_pitch', 'number', []);
+  const getPixelFormat = Module.cwrap('mgba_web_get_pixel_format', 'number', []);
+  const getAudioBuf = Module.cwrap('mgba_web_get_audio_buffer', 'number', []);
+  const getAudioFrames = Module.cwrap('mgba_web_get_audio_frames', 'number', []);
+  const getAudioRate = Module.cwrap('mgba_web_get_audio_rate', 'number', []);
+  const setButton = Module.cwrap('mgba_web_set_button', null, ['number', 'number']);
+  const getSramPtr = Module.cwrap('mgba_web_get_sram_ptr', 'number', []);
+  const getSramSize = Module.cwrap('mgba_web_get_sram_size', 'number', []);
+
+  init();
+  ui.loadBtn.disabled = false;
+  setStatus('Ready');
+
+  // --- Persistence: battery save (SRAM) -> file in IDBFS -> IndexedDB ---
+  let currentSaveName = null;
+  let lastSyncTime = null;
+  let running = false;
+
+  function flushSram() {
+    if (!currentSaveName) return;
+    const size = getSramSize();
+    if (size <= 0) return; // this game has no battery save
+    const ptr = getSramPtr();
+    const data = Module.HEAPU8.subarray(ptr, ptr + size);
+    try {
+      Module.FS.writeFile(currentSaveName, data);
+    } catch (e) {
+      console.error('SRAM write failed', e);
+    }
+  }
+
+  let syncTimer = null;
+  function schedulePersist() {
+    if (syncTimer) return;
+    syncTimer = setTimeout(() => {
+      syncTimer = null;
+      flushSram();
+      if (running) setLeds('save');
+      Module.FS.syncfs(false, (err) => {
+        if (err) { console.error('IDBFS sync failed', err); ui.saveStatus.textContent = 'sync failed'; }
+        else lastSyncTime = Date.now();
+        if (running) setLeds('run');
+      });
+    }, 2000);
+  }
+  window.addEventListener('beforeunload', () => {
+    flushSram();
+    Module.FS.syncfs(false, () => {});
+  });
+
+  setInterval(() => {
+    if (!currentSaveName) return;
+    if (getSramSize() <= 0) { ui.saveStatus.textContent = 'no battery save'; return; }
+    if (lastSyncTime === null) { ui.saveStatus.textContent = 'pending'; return; }
+    const s = Math.max(0, Math.round((Date.now() - lastSyncTime) / 1000));
+    if(s > 2){
+      ui.saveStatus.textContent = `synced ${s}s ago`;
+    }
+    else{
+      ui.saveStatus.textContent = `live-sync active`;
+    }
+    
+  }, 1000);
+
+  // --- Input: keyboard -> RETRO_DEVICE_ID_JOYPAD_* (see libretro.h) ---
+  const BTN = { B: 0, Y: 1, SELECT: 2, START: 3, UP: 4, DOWN: 5, LEFT: 6, RIGHT: 7, A: 8, X: 9, L: 10, R: 11 };
+  const KEYMAP = {
+    ArrowUp: BTN.UP, ArrowDown: BTN.DOWN, ArrowLeft: BTN.LEFT, ArrowRight: BTN.RIGHT,
+    KeyZ: BTN.A, KeyX: BTN.B, Enter: BTN.START, ShiftRight: BTN.SELECT,
+    KeyA: BTN.L, KeyS: BTN.R,
+  };
+  const typing = (e) => /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.closest?.('wa-select, wa-input');
+  window.addEventListener('keydown', (e) => {
+    if (typing(e) || !(e.code in KEYMAP)) return;
+    setButton(KEYMAP[e.code], 1); e.preventDefault();
+  });
+  window.addEventListener('keyup', (e) => {
+    if (typing(e) || !(e.code in KEYMAP)) return;
+    setButton(KEYMAP[e.code], 0); e.preventDefault();
+  });
+
+  // --- Audio (created lazily on first user gesture) ---
+  let audioCtx = null;
+  let nextAudioTime = 0;
+
+  function pumpAudio() {
+    if (!audioCtx) return;
+    const frames = getAudioFrames();
+    if (frames === 0) return;
+    const ptr = getAudioBuf();
+    const rate = getAudioRate();
+    const samples = new Int16Array(Module.HEAP16.buffer, ptr, frames * 2);
+    const buf = audioCtx.createBuffer(2, frames, rate);
+    const left = buf.getChannelData(0);
+    const right = buf.getChannelData(1);
+    for (let i = 0; i < frames; i++) {
+      left[i] = samples[i * 2] / 32768;
+      right[i] = samples[i * 2 + 1] / 32768;
+    }
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    src.connect(audioCtx.destination);
+    const startAt = Math.max(audioCtx.currentTime, nextAudioTime);
+    src.start(startAt);
+    nextAudioTime = startAt + buf.duration;
+  }
+
+  // --- Display sizing ---
+  let currentScale = 2;
+  let stretchMode = false;
+
+  function applyDisplaySize() {
+    if (stretchMode) {
+      const w = parseInt($('customW').value, 10) || canvas.width;
+      const h = parseInt($('customH').value, 10) || canvas.height;
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+    } else {
+      canvas.style.width = (canvas.width * currentScale) + 'px';
+      canvas.style.height = (canvas.height * currentScale) + 'px';
+    }
+  }
+
+  $('scaleSelect').addEventListener('change', (e) => {
+    currentScale = parseInt(e.target.value, 10) || 2;
+    applyDisplaySize();
+  });
+
+  $('stretchToggle').addEventListener('change', (e) => {
+    stretchMode = e.target.checked;
+    $('customSizeRow').hidden = !stretchMode;
+    $('scaleSelect').disabled = stretchMode;
+    applyDisplaySize();
+  });
+
+  $('applyCustomSize').addEventListener('click', applyDisplaySize);
+
+  const fsIcon = $('fullscreenIcon');
+  $('fullscreenBtn').addEventListener('click', () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else if (bezel.requestFullscreen) bezel.requestFullscreen();
+  });
+
+  document.getElementById('fullscreenBtn2').addEventListener('click', () => {
+      if (canvas.requestFullscreen) canvas.requestFullscreen();
+    });
+  document.addEventListener('fullscreenchange', () => {
+    fsIcon.name = document.fullscreenElement ? 'compress' : 'expand';
+  });
+
+  $('helpBtn').addEventListener('click', () => {
+    const d = $('helpDetails');
+    d.open = !d.open;
+    if (d.open) d.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+
+  // --- Video ---
+  let imageData = null;
+  function pumpVideo() {
+    const w = getVideoW(), h = getVideoH();
+    if (!w || !h) return;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+      imageData = ctx.createImageData(w, h);
+      applyDisplaySize();
+      ui.videoInfo.textContent = `${w}×${h}`;
+    }
+    if (imageData == null) {
+      canvas.width = w;
+      canvas.height = h;
+      imageData = ctx.createImageData(w, h);
+      applyDisplaySize();
+      ui.videoInfo.textContent = `${w}×${h}`;
+    }
+    const pitch = getVideoPitch();
+    const fmt = getPixelFormat(); // 0 = 0RGB1555, 1 = XRGB8888, 2 = RGB565
+    const ptr = getVideoBuf();
+    const out = imageData.data;
+
+    if (fmt === 2) { // RGB565
+      const px = new Uint16Array(Module.HEAPU8.buffer, ptr, (pitch * h) / 2);
+      const stride = pitch / 2;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const p = px[y * stride + x];
+          const r = (p >> 11) & 0x1f, g = (p >> 5) & 0x3f, b = p & 0x1f;
+          const o = (y * w + x) * 4;
+          out[o] = (r << 3) | (r >> 2);
+          out[o + 1] = (g << 2) | (g >> 4);
+          out[o + 2] = (b << 3) | (b >> 2);
+          out[o + 3] = 255;
+        }
+      }
+    } else if (fmt === 1) { // XRGB8888
+      const px = new Uint8Array(Module.HEAPU8.buffer, ptr, pitch * h);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const i = y * pitch + x * 4;
+          const o = (y * w + x) * 4;
+          out[o] = px[i + 2]; out[o + 1] = px[i + 1]; out[o + 2] = px[i]; out[o + 3] = 255;
+        }
+      }
+    } else { // 0RGB1555
+      const px = new Uint16Array(Module.HEAPU8.buffer, ptr, (pitch * h) / 2);
+      const stride = pitch / 2;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const p = px[y * stride + x];
+          const r = (p >> 10) & 0x1f, g = (p >> 5) & 0x1f, b = p & 0x1f;
+          const o = (y * w + x) * 4;
+          out[o] = (r << 3) | (r >> 2);
+          out[o + 1] = (g << 3) | (g >> 2);
+          out[o + 2] = (b << 3) | (b >> 2);
+          out[o + 3] = 255;
+        }
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  function loop() {
+    runFrame();
+    pumpVideo();
+    pumpAudio();
+    schedulePersist();
+    requestAnimationFrame(loop);
+  }
+
+  // --- ROM loading ---
+  ui.loadBtn.addEventListener('click', () => ui.romInput.click());
+
+  ui.romInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (running) { location.reload(); return; } // core supports one loaded game per page session
+
+    setStatus('Loading');
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const ptr = Module._malloc(bytes.length);
+    Module.HEAPU8.set(bytes, ptr);
+    const ok = loadRom(ptr, bytes.length, file.name);
+    Module._free(ptr);
+    if (!ok) { setStatus('Failed to load ROM'); return; }
+
+    currentSaveName = '/data/saves/' + file.name.replace(/\.[^/.]+$/, '') + '.srm';
+    const sramSize = getSramSize();
+    let restored = false;
+    if (sramSize > 0) {
+      try {
+        const saved = Module.FS.readFile(currentSaveName);
+        Module.HEAPU8.set(saved.subarray(0, Math.min(saved.length, sramSize)), getSramPtr());
+        restored = true;
+      } catch (err) {
+        // No existing save for this ROM yet: expected on first run.
+      }
+    }
+
+    ui.romName.textContent = file.name;
+    ui.audioInfo.textContent = `${getAudioRate()} Hz stereo`;
+    ui.saveStatus.textContent = restored ? 'restored from browser storage' : (sramSize > 0 ? 'new save' : 'no battery save');
+    ui.emptyHint.hidden = true;
+    ui.loadBtn.innerHTML = '<wa-icon slot="start" name="folder-open" variant="solid"></wa-icon>Change ROM';
+    setStatus('Running');
+    running = true;
+    setLeds('run');
+
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      bezel.classList.remove('power-on');
+      void bezel.offsetWidth; // restart the animation
+      bezel.classList.add('power-on');
+    }
+
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    audioCtx.resume();
+    requestAnimationFrame(loop);
+  });
+})();
+</script>
+</body>
+</html>
