@@ -1,7 +1,8 @@
 # mGBAWEB
 GBA EMU | WASM | WEB | LIBRETRO
-
 ===
+Build 3 Live: https://partakithrc1.github.io/mGBAWEB/
+
 ```
 sudo apt install cmake git python3 build-essential
 git clone https://github.com/emscripten-core/emsdk.git
