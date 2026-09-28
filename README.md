@@ -36,3 +36,6 @@ Then run build:
 ```
 chmod +x build.sh && ./build.sh
 ```
+
+While the repository frontend is MIT-licensed, the underlying mGBA emulator engine/Wasm module is subject to the Mozilla Public License v2.0
+[https://github.com/libretro/mgba](https://github.com/libretro/mgba)
