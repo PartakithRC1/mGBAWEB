@@ -39,3 +39,4 @@ chmod +x build.sh && ./build.sh
 
 While the repository frontend is MIT-licensed, the underlying mGBA emulator engine/Wasm module is subject to the Mozilla Public License v2.0
 [https://github.com/libretro/mgba](https://github.com/libretro/mgba)
+Source at pull time on commit: [7a12d6d4b](https://github.com/libretro/mgba/commit/7a12d6d4b9acb14c0ae62c9166b6a2f3d08007f6)
