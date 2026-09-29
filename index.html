@@ -269,6 +269,24 @@
     <div class="wordmark">mGBA <span>Web</span></div>
   </div>
   <div class="header-actions">
+    <wa-select id="shaderSelect" size="s" value="none" aria-label="Shader">
+      <wa-icon slot="start" name="wand-magic-sparkles" variant="solid"></wa-icon>
+      <wa-option value="none">No filter</wa-option>
+      <wa-option value="smooth">Smooth</wa-option>
+      <wa-option value="scanlines">Scanlines</wa-option>
+      <wa-option value="grid">LCD grid</wa-option>
+    </wa-select>
+
+    <wa-button id="exportSaveBtn" appearance="plain" size="s" disabled>
+      <wa-icon slot="start" name="file-export" variant="solid"></wa-icon>
+      Export save
+    </wa-button>
+    <wa-button id="importSaveBtn" appearance="plain" size="s" disabled>
+      <wa-icon slot="start" name="file-import" variant="solid"></wa-icon>
+      Import save
+    </wa-button>
+    <input type="file" id="importSaveInput" accept=".srm,.sav" hidden>
+
     <wa-button id="helpBtn" appearance="plain" size="s">
       <wa-icon slot="start" name="keyboard" variant="solid"></wa-icon>
       Controls
@@ -286,7 +304,8 @@
     <span class="screw bl"></span><span class="screw br"></span>
 
     <div class="screen-bezel" id="bezel">
-      <canvas id="screen" width="240" height="160" style="width:480px;height:320px;"></canvas>
+      <canvas id="screen" width="240" height="160" hidden></canvas>
+      <canvas id="display" width="480" height="320" style="width:480px;height:320px;"></canvas>
       <div class="empty-hint" id="emptyHint">
         <strong>No game loaded</strong>
         <span>Load a .gba, .gb or .gbc file to start</span>
@@ -356,11 +375,133 @@
   const ctx = canvas.getContext('2d');
   const bezel = $('bezel');
 
+  // --- Shaders: #screen (above) stays the raw pixel buffer, untouched.
+  // #display is the visible canvas; WebGL draws the buffer onto it through
+  // whichever fragment shader is selected. ---
+  const display = $('display');
+  const gl = display.getContext('webgl') || display.getContext('experimental-webgl');
+
+  const VERTEX_SRC = `
+    attribute vec2 aPos;
+    varying vec2 vUv;
+    void main() {
+      vUv = aPos * 0.5 + 0.5;
+      vUv.y = 1.0 - vUv.y; // canvas-sourced textures are top-left origin
+      gl_Position = vec4(aPos, 0.0, 1.0);
+    }
+  `;
+  const PASSTHROUGH_FRAG = `
+    precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uTex;
+    void main() { gl_FragColor = texture2D(uTex, vUv); }
+  `;
+  const SCANLINES_FRAG = `
+    precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uTex;
+    uniform vec2 uSourceSize;
+    void main() {
+      vec4 color = texture2D(uTex, vUv);
+      float lineY = vUv.y * uSourceSize.y;
+      float pattern = mod(floor(lineY), 2.0) < 1.0 ? 1.0 : 0.72;
+      color.rgb *= pattern;
+      gl_FragColor = color;
+    }
+  `;
+  const GRID_FRAG = `
+    precision mediump float;
+    varying vec2 vUv;
+    uniform sampler2D uTex;
+    uniform vec2 uSourceSize;
+    void main() {
+      vec4 color = texture2D(uTex, vUv);
+      vec2 f = fract(vUv * uSourceSize);
+      vec2 edge = min(f, 1.0 - f); // distance to nearest texel edge
+      float mask = smoothstep(0.0, 0.08, edge.x) * smoothstep(0.0, 0.08, edge.y);
+      color.rgb *= mix(0.55, 1.0, mask);
+      gl_FragColor = color;
+    }
+  `;
+
+  let programs = null;
+  let quadBuffer = null;
+  let gpuTexture = null;
+  let shaderMode = 'none';
+
+  if (gl) {
+    function compileShader(type, src) {
+      const sh = gl.createShader(type);
+      gl.shaderSource(sh, src);
+      gl.compileShader(sh);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(sh));
+      return sh;
+    }
+    function linkProgram(fragSrc) {
+      const vs = compileShader(gl.VERTEX_SHADER, VERTEX_SRC);
+      const fs = compileShader(gl.FRAGMENT_SHADER, fragSrc);
+      const prog = gl.createProgram();
+      gl.attachShader(prog, vs);
+      gl.attachShader(prog, fs);
+      gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) console.error(gl.getProgramInfoLog(prog));
+      return {
+        program: prog,
+        aPos: gl.getAttribLocation(prog, 'aPos'),
+        uTex: gl.getUniformLocation(prog, 'uTex'),
+        uSourceSize: gl.getUniformLocation(prog, 'uSourceSize'),
+      };
+    }
+
+    programs = {
+      none: linkProgram(PASSTHROUGH_FRAG),
+      smooth: linkProgram(PASSTHROUGH_FRAG),
+      scanlines: linkProgram(SCANLINES_FRAG),
+      grid: linkProgram(GRID_FRAG),
+    };
+
+    quadBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+
+    gpuTexture = gl.createTexture();
+  } else {
+    console.error('WebGL unavailable; shaders disabled, falling back to plain output would require extra code.');
+  }
+
+  $('shaderSelect').addEventListener('change', (e) => { shaderMode = e.target.value; });
+
+  function renderDisplay() {
+    if (!gl) return;
+    const p = programs[shaderMode] || programs.none;
+    gl.useProgram(p.program);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+    gl.enableVertexAttribArray(p.aPos);
+    gl.vertexAttribPointer(p.aPos, 2, gl.FLOAT, false, 0, 0);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, gpuTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+    const filter = shaderMode === 'smooth' ? gl.LINEAR : gl.NEAREST;
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    gl.uniform1i(p.uTex, 0);
+    if (p.uSourceSize) gl.uniform2f(p.uSourceSize, canvas.width, canvas.height);
+
+    gl.viewport(0, 0, display.width, display.height);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+
   const ui = {
     powerLed: $('powerLed'), statusLed: $('statusLed'),
     statusText: $('statusText'), romName: $('romName'),
     videoInfo: $('videoInfo'), audioInfo: $('audioInfo'), saveStatus: $('saveStatus'),
     emptyHint: $('emptyHint'), loadBtn: $('loadBtn'), romInput: $('romInput'),
+    exportSaveBtn: $('exportSaveBtn'), importSaveBtn: $('importSaveBtn'), importSaveInput: $('importSaveInput'),
   };
 
   function setLeds(state) {
@@ -501,15 +642,27 @@
   let stretchMode = false;
 
   function applyDisplaySize() {
+    let w, h;
     if (stretchMode) {
-      const w = parseInt($('customW').value, 10) || canvas.width;
-      const h = parseInt($('customH').value, 10) || canvas.height;
-      canvas.style.width = w + 'px';
-      canvas.style.height = h + 'px';
+      w = parseInt($('customW').value, 10) || display.width;
+      h = parseInt($('customH').value, 10) || display.height;
     } else {
-      canvas.style.width = (canvas.width * currentScale) + 'px';
-      canvas.style.height = (canvas.height * currentScale) + 'px';
+      w = canvas.width * currentScale;
+      h = canvas.height * currentScale;
     }
+    display.style.width = w + 'px';
+    display.style.height = h + 'px';
+
+    // Give the WebGL canvas a real backing-store resolution to render at
+    // (accounting for HiDPI screens) rather than just stretching a small buffer.
+    const dpr = window.devicePixelRatio || 1;
+    const bw = Math.max(1, Math.round(w * dpr));
+    const bh = Math.max(1, Math.round(h * dpr));
+    if (display.width !== bw || display.height !== bh) {
+      display.width = bw;
+      display.height = bh;
+    }
+    if (gl) gl.viewport(0, 0, display.width, display.height);
   }
 
   $('scaleSelect').addEventListener('change', (e) => {
@@ -533,7 +686,7 @@
   });
 
   document.getElementById('fullscreenBtn2').addEventListener('click', () => {
-      if (canvas.requestFullscreen) canvas.requestFullscreen();
+      if (display.requestFullscreen) display.requestFullscreen();
     });
   document.addEventListener('fullscreenchange', () => {
     fsIcon.name = document.fullscreenElement ? 'compress' : 'expand';
@@ -613,6 +766,7 @@
   function loop() {
     runFrame();
     pumpVideo();
+    renderDisplay();
     pumpAudio();
     schedulePersist();
     requestAnimationFrame(loop);
@@ -650,6 +804,8 @@
     ui.romName.textContent = file.name;
     ui.audioInfo.textContent = `${getAudioRate()} Hz stereo`;
     ui.saveStatus.textContent = restored ? 'restored from browser storage' : (sramSize > 0 ? 'new save' : 'no battery save');
+    ui.exportSaveBtn.disabled = sramSize <= 0;
+    ui.importSaveBtn.disabled = sramSize <= 0;
     ui.emptyHint.hidden = true;
     ui.loadBtn.innerHTML = '<wa-icon slot="start" name="folder-open" variant="solid"></wa-icon>Change ROM';
     setStatus('Running');
@@ -665,6 +821,54 @@
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     audioCtx.resume();
     requestAnimationFrame(loop);
+  });
+
+  // --- Export / import save (.srm) ---
+  ui.exportSaveBtn.addEventListener('click', () => {
+    if (!currentSaveName) return;
+    flushSram(); // make sure the file reflects the live in-game save before exporting
+    let bytes;
+    try {
+      bytes = Module.FS.readFile(currentSaveName);
+    } catch (err) {
+      console.error('Export failed: no save file yet', err);
+      return;
+    }
+    const blob = new Blob([bytes], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = currentSaveName.split('/').pop();
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  ui.importSaveBtn.addEventListener('click', () => ui.importSaveInput.click());
+
+  ui.importSaveInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = ''; // allow re-importing the same filename later
+    if (!file || !currentSaveName) return;
+
+    const sramSize = getSramSize();
+    if (sramSize <= 0) {
+      ui.saveStatus.textContent = 'this game has no battery save to import into';
+      return;
+    }
+
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const clipped = bytes.subarray(0, Math.min(bytes.length, sramSize));
+    Module.HEAPU8.set(clipped, getSramPtr()); // apply to the running game immediately
+    Module.FS.writeFile(currentSaveName, clipped); // persist it under this ROM's save name
+
+    setLeds('save');
+    Module.FS.syncfs(false, (err) => {
+      if (err) { console.error('IDBFS sync failed', err); ui.saveStatus.textContent = 'import sync failed'; }
+      else { lastSyncTime = Date.now(); ui.saveStatus.textContent = 'imported save'; }
+      if (running) setLeds('run');
+    });
   });
 })();
 </script>
