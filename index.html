@@ -276,6 +276,10 @@
     }
   }
 
+      .touch-controls {
+      display: block;
+    }
+
   .t-btn {
     position: absolute;
     pointer-events: auto;
@@ -311,7 +315,7 @@
   .shoulder-pads { position: absolute; top: 0; width: 100%; pointer-events: none; }
   .s-l { top: -25px; left: 10px; }
   .s-r { top: -25px; right: 10px; }
-  .center-pads { position: absolute; bottom: 3%; left: 50%; transform: translateX(-50%); display: flex; gap: 0.8rem; }
+  .center-pads { position: absolute; bottom: 3%; left: 50%; transform: translateX(-50%); display: flex; gap: 6.8rem; }
 </style>
 </head>
 <body>
@@ -358,8 +362,8 @@
     <wa-button id="btnR" data-btn="R" class="t-btn s-r" size="s">R</wa-button>
   </div>
   <div class="center-pads">
-    <wa-button id="btnSelect" data-btn="Select" class="t-btn c-sel" appearance="outlined" size="s">Select</wa-button>
-    <wa-button id="btnStart" data-btn="Start" class="t-btn2 c-start" appearance="outlined" size="s">Start</wa-button>
+    <wa-button id="btnSelect" data-btn="Select" class="t-btn s-l" appearance="outlined" size="s">Select</wa-button>
+    <wa-button id="btnStart" data-btn="Start" class="t-btn s-r" appearance="outlined" size="s">Start</wa-button>
   </div>
 </div>  
       <div class="empty-hint" id="emptyHint">
