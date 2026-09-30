@@ -276,8 +276,21 @@
     }
   }
 
+      .touch-controls {
+      display: block;
+    }
+
   .t-btn {
     position: absolute;
+    pointer-events: auto;
+    opacity: 0.45;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+    transition: opacity 0.1s;
+  }
+  .t-btn2 {
+    position: relative;
     pointer-events: auto;
     opacity: 0.45;
     user-select: none;
@@ -302,7 +315,7 @@
   .shoulder-pads { position: absolute; top: 0; width: 100%; pointer-events: none; }
   .s-l { top: -25px; left: 10px; }
   .s-r { top: -25px; right: 10px; }
-  .center-pads { position: absolute; bottom: 3%; left: 50%; transform: translateX(-50%); display: flex; gap: 0.8rem; }
+  .center-pads { position: absolute; bottom: 3%; left: 50%; transform: translateX(-50%); display: flex; gap: 6.8rem; }
 </style>
 </head>
 <body>
@@ -335,22 +348,22 @@
             <!-- Mobile Touch Controls -->
 <div id="touchControls" class="touch-controls">
   <div class="dpad">
-    <wa-button id="btnUp" class="t-btn d-up" appearance="filled"><wa-icon name="caret-up" variant="solid"></wa-icon></wa-button>
-    <wa-button id="btnLeft" class="t-btn d-left" appearance="filled"><wa-icon name="caret-left" variant="solid"></wa-icon></wa-button>
-    <wa-button id="btnRight" class="t-btn d-right" appearance="filled"><wa-icon name="caret-right" variant="solid"></wa-icon></wa-button>
-    <wa-button id="btnDown" class="t-btn d-down" appearance="filled"><wa-icon name="caret-down" variant="solid"></wa-icon></wa-button>
+    <wa-button id="btnUp" data-btn="UP" class="t-btn d-up" appearance="filled"><wa-icon name="caret-up" variant="solid"></wa-icon></wa-button>
+    <wa-button id="btnLeft" data-btn="LEFT" class="t-btn d-left" appearance="filled"><wa-icon name="caret-left" variant="solid"></wa-icon></wa-button>
+    <wa-button id="btnRight" data-btn="RIGHT" class="t-btn d-right" appearance="filled"><wa-icon name="caret-right" variant="solid"></wa-icon></wa-button>
+    <wa-button id="btnDown" data-btn="DOWN" class="t-btn d-down" appearance="filled"><wa-icon name="caret-down" variant="solid"></wa-icon></wa-button>
   </div>
   <div class="action-pads">
-    <wa-button id="btnB" class="t-btn a-b" variant="brand">B</wa-button>
-    <wa-button id="btnA" class="t-btn a-a" variant="brand">A</wa-button>
+    <wa-button id="btnB" data-btn="B" class="t-btn a-b" variant="brand">B</wa-button>
+    <wa-button id="btnA" data-btn="A" class="t-btn a-a" variant="brand">A</wa-button>
   </div>
   <div class="shoulder-pads">
-    <wa-button id="btnL" class="t-btn s-l" size="s">L</wa-button>
-    <wa-button id="btnR" class="t-btn s-r" size="s">R</wa-button>
+    <wa-button id="btnL" data-btn="L" class="t-btn s-l" size="s">L</wa-button>
+    <wa-button id="btnR" data-btn="R" class="t-btn s-r" size="s">R</wa-button>
   </div>
   <div class="center-pads">
-    <wa-button id="btnSelect" class="t-btn c-sel" appearance="outlined" size="s">Select</wa-button>
-    <wa-button id="btnStart" class="t-btn c-start" appearance="outlined" size="s">Start</wa-button>
+    <wa-button id="btnSelect" data-btn="Select" class="t-btn s-l" appearance="outlined" size="s">Select</wa-button>
+    <wa-button id="btnStart" data-btn="Start" class="t-btn s-r" appearance="outlined" size="s">Start</wa-button>
   </div>
 </div>  
       <div class="empty-hint" id="emptyHint">
@@ -534,6 +547,32 @@
   window.addEventListener('keyup', (e) => {
     if (typing(e) || !(e.code in KEYMAP)) return;
     setButton(KEYMAP[e.code], 0); e.preventDefault();
+  });
+
+  // --- Input: touch/mouse controls ---
+  // Select all elements inside .touch-controls that have a data-btn attribute
+  const touchNodes = document.querySelectorAll('.touch-controls [data-btn]');
+
+  const handleTouchInput = (e, isPressed) => {
+    // Prevent default to stop screen scrolling and double-firing synthetic mouse events on mobile
+    if (e.cancelable) e.preventDefault();
+    
+    const btnKey = e.currentTarget.dataset.btn;
+    if (btnKey in BTN) {
+      setButton(BTN[btnKey], isPressed);
+    }
+  };
+
+  touchNodes.forEach(node => {
+    // Mobile touch events
+    node.addEventListener('touchstart', (e) => handleTouchInput(e, 1), { passive: false });
+    node.addEventListener('touchend', (e) => handleTouchInput(e, 0));
+    node.addEventListener('touchcancel', (e) => handleTouchInput(e, 0));
+    
+    // Mouse events (helpful for testing the UI on desktop)
+    node.addEventListener('mousedown', (e) => handleTouchInput(e, 1));
+    node.addEventListener('mouseup', (e) => handleTouchInput(e, 0));
+    node.addEventListener('mouseleave', (e) => handleTouchInput(e, 0)); // Releases if cursor drags off button
   });
 
   // --- Audio (created lazily on first user gesture) ---
