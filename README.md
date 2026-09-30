@@ -1,5 +1,4 @@
 # mGBAWEB
-GBA EMU | WASM | WEB | LIBRETRO
 ===
 Build 3 Live: https://partakithrc1.github.io/mGBAWEB/
 
