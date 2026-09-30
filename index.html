@@ -271,8 +271,7 @@
 
   /* Only display in fullscreen, and only on touch-capable (coarse pointer) devices */
   @media (pointer: coarse) {
-    .screen-bezel:fullscreen .touch-controls,
-    .screen-bezel:-webkit-full-screen .touch-controls {
+    .touch-controls {
       display: block;
     }
   }
@@ -332,7 +331,8 @@
 
     <div class="screen-bezel" id="bezel">
       <canvas id="screen" width="240" height="160" style="width:480px;height:320px;">
-      <!-- Mobile Touch Controls -->
+      </canvas>
+            <!-- Mobile Touch Controls -->
 <div id="touchControls" class="touch-controls">
   <div class="dpad">
     <wa-button id="btnUp" class="t-btn d-up" appearance="filled"><wa-icon name="caret-up" variant="solid"></wa-icon></wa-button>
@@ -353,7 +353,6 @@
     <wa-button id="btnStart" class="t-btn c-start" appearance="outlined" size="s">Start</wa-button>
   </div>
 </div>  
-      </canvas>
       <div class="empty-hint" id="emptyHint">
         <strong>No game loaded</strong>
         <span>Load a .gba, .gb or .gbc file to start</span>
