@@ -1,6 +1,6 @@
 # mGBAWEB
 ===
-Build 3 Live: [https://partakithrc1.github.io/mGBAWEB/](https://partakithware.github.io/mGBAWEB/)
+Build 3 Live: [https://partakithware.github.io/mGBAWEB/](https://partakithware.github.io/mGBAWEB/)
 
 ```
 sudo apt install cmake git python3 build-essential
